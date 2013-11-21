@@ -102,6 +102,7 @@ public class WebSocketReader extends Thread {
 	public void quit() {
 
 		mStopped = true;
+			
 
 		Log.d(TAG, "quit");
 	}
