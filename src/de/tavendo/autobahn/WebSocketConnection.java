@@ -28,7 +28,6 @@ import javax.net.SocketFactory;
 import android.net.SSLCertificateSocketFactory;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
 import de.tavendo.autobahn.WebSocket.WebSocketConnectionObserver.WebSocketCloseNotification;
@@ -48,7 +47,8 @@ public class WebSocketConnection implements WebSocket {
 	protected HandlerThread mWriterThread;
 
 	protected Socket mSocket;
-	private SocketThread mSocketThread;
+//	private SocketThread mSocketThread;
+	private SocketHandler mSocketHandler;
 
 	private URI mWebSocketURI;
 	private String[] mWebSocketSubprotocols;
@@ -98,7 +98,7 @@ public class WebSocketConnection implements WebSocket {
 	private void failConnection(final WebSocketCloseNotification code, final String reason) {
 		Log.d(TAG, "fail connection [code = " + code + ", reason = " + reason);
 		
-		final SocketThread socketThread = mSocketThread;
+		final SocketHandler socketThread = mSocketHandler;
 		if (socketThread == null) {
 		    Log.d(TAG, "Already disconnected");
 		    return;
@@ -124,28 +124,11 @@ public class WebSocketConnection implements WebSocket {
 		}
 
 		if (mSocket != null && socketThread != null) {
-			socketThread.getHandler().post(new Runnable() {
-
-				@Override
-				public void run() {
-					socketThread.stopConnection();
-				}
-			});
+			socketThread.sendEmptyMessage(SocketHandler.STOP);
 		} else {
 			Log.d(TAG, "mTransportChannel already NULL");
 		}
 		
-		if (socketThread != null) {
-            socketThread.getHandler().post(new Runnable() {
-                
-                @Override
-                public void run() {
-                    Looper.myLooper().quit();
-                    mSocketThread = null;
-                }
-            });
-		}
-
 		// wait until we've posted the socket close
 		if (mReader != null) {
 			try {
@@ -216,34 +199,20 @@ public class WebSocketConnection implements WebSocket {
 	}
 
 	private void connect() {
-		mSocketThread = new SocketThread(mWebSocketURI, mOptions);
+//		mSocketThread = new SocketThread(mWebSocketURI, mOptions);
+	    final HandlerThread socketThread = new HandlerThread("SocketThread");
+	    socketThread.start();
+	    mSocketHandler = new SocketHandler(mHandler, socketThread, mWebSocketURI, mOptions);
+	    mSocketHandler.sendEmptyMessage(SocketHandler.START);
 
-		mSocketThread.start();
-		synchronized (mSocketThread) {
-			try {
-				mSocketThread.wait();
-			} catch (final InterruptedException e) {
-			}
-		}
-		mSocketThread.getHandler().post(new Runnable() {
-			
-			@Override
-			public void run() {
-				mSocketThread.startConnection();
-			}
-		});
-		
-		synchronized (mSocketThread) {
-			try {
-				mSocketThread.wait();
-			} catch (final InterruptedException e) {
-			}
-		}
-
-		this.mSocket = mSocketThread.getSocket();
+	}
+	
+	void onConnected(final Socket socket) {
+	    Log.d(TAG, "onConnected: " + socket);
+		this.mSocket = socket;
 		
 		if (mSocket == null) {
-			onClose(WebSocketCloseNotification.CANNOT_CONNECT, mSocketThread.getFailureMessage());
+			onClose(WebSocketCloseNotification.CANNOT_CONNECT, mSocketHandler.getFailureMessage());
 		} else if (mSocket.isConnected()) {
 			try {
 				createReader();
@@ -350,7 +319,11 @@ public class WebSocketConnection implements WebSocket {
 	private void handleMessage(final Message message) {
 		final WebSocket.WebSocketConnectionObserver webSocketObserver = mWebSocketConnectionObserver;
 
-		if (message.obj instanceof WebSocketMessage.TextMessage) {
+		if (message.what == ThreadHandler.CONNECTED) {
+		    
+		    onConnected((Socket) message.obj);
+		    
+		} else if (message.obj instanceof WebSocketMessage.TextMessage) {
 			final WebSocketMessage.TextMessage textMessage = (WebSocketMessage.TextMessage) message.obj;
 
 			if (webSocketObserver != null) {
@@ -436,41 +409,38 @@ public class WebSocketConnection implements WebSocket {
 
 
 
-	public static class SocketThread extends Thread {
-		private static final String WS_CONNECTOR = "WebSocketConnector";
-
+	public static class SocketHandler extends Handler {
+	    
+	    public static final int START = 1;
+	    public static final int STOP  = 2;
+	    
 		private final URI mWebSocketURI;
 
 		private Socket mSocket = null;
 		private String mFailureMessage = null;
+        private final Handler mMasterHandler;
 		
-		private Handler mHandler;
-		
-
-
-		public SocketThread(final URI uri, final WebSocketOptions options) {
-			this.setName(WS_CONNECTOR);
+		public SocketHandler(final Handler masterHandler, final HandlerThread socketThread, final URI uri, final WebSocketOptions options) {
+		    super(socketThread.getLooper());
 			
-			this.mWebSocketURI = uri;
+		    mMasterHandler = masterHandler;
+		    mWebSocketURI = uri;
 		}
-
-
-
+		
 		@Override
-		public void run() {
-			Looper.prepare();
-			this.mHandler = new Handler();
-			synchronized (this) {
-				notifyAll();
-			}
-			
-			Looper.loop();
-			Log.d(TAG, "SocketThread exited.");
+		public void handleMessage(final Message msg) {
+		    switch (msg.what) {
+		    case START:
+		        startConnection();
+		        break;
+		        
+		    case STOP:
+		        stopConnection();
+		        break;
+		    }
 		}
 
-
-
-		public void startConnection() {	
+		private void startConnection() {	
 			try {
 				final String host = mWebSocketURI.getHost();
 				int port = mWebSocketURI.getPort();
@@ -496,23 +466,20 @@ public class WebSocketConnection implements WebSocket {
 				this.mFailureMessage = e.getLocalizedMessage();
 			}
 			
-			synchronized (this) {
-				notifyAll();
-			}
+			mMasterHandler.obtainMessage(ThreadHandler.CONNECTED, mSocket).sendToTarget();
 		}
 		
-		public void stopConnection() {
+		private void stopConnection() {
 			try {
 				mSocket.close();
 				this.mSocket = null;
+				
+				getLooper().quit();
 			} catch (final IOException e) {
 				this.mFailureMessage = e.getLocalizedMessage();
 			}
 		}
 
-		public Handler getHandler() {
-			return mHandler;
-		}
 		public Socket getSocket() {
 			return mSocket;
 		}
@@ -524,7 +491,10 @@ public class WebSocketConnection implements WebSocket {
 
 
 	private static class ThreadHandler extends Handler {
-		private final WeakReference<WebSocketConnection> mWebSocketConnection;
+
+		public static final int CONNECTED = 101;
+
+        private final WeakReference<WebSocketConnection> mWebSocketConnection;
 
 
 
