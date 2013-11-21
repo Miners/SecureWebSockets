@@ -20,8 +20,6 @@ package de.tavendo.autobahn;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 
@@ -29,6 +27,7 @@ import javax.net.SocketFactory;
 
 import android.net.SSLCertificateSocketFactory;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
@@ -42,12 +41,13 @@ public class WebSocketConnection implements WebSocket {
 	private static final String WS_WRITER = "WebSocketWriter";
 	private static final String WS_READER = "WebSocketReader";
 
-	private final Handler mHandler;
+	protected final Handler mHandler;
 
-	private WebSocketReader mWebSocketReader;
-	private WebSocketWriter mWebSocketWriter;
+	protected WebSocketReader mReader;
+	protected WebSocketWriter mWriter;
+	protected HandlerThread mWriterThread;
 
-	private Socket mSocket;
+	protected Socket mSocket;
 	private SocketThread mSocketThread;
 
 	private URI mWebSocketURI;
@@ -55,7 +55,7 @@ public class WebSocketConnection implements WebSocket {
 
 	private WeakReference<WebSocket.WebSocketConnectionObserver> mWebSocketConnectionObserver;
 
-	private WebSocketOptions mWebSocketOptions;
+	protected WebSocketOptions mOptions;
 	private boolean mPreviousConnection = false;
 
 
@@ -69,49 +69,53 @@ public class WebSocketConnection implements WebSocket {
 
 	//
 	// Forward to the writer thread
-	public void sendTextMessage(String payload) {
-		mWebSocketWriter.forward(new WebSocketMessage.TextMessage(payload));
+	@Override
+    public void sendTextMessage(final String payload) {
+		mWriter.forward(new WebSocketMessage.TextMessage(payload));
 	}
 
 
-	public void sendRawTextMessage(byte[] payload) {
-		mWebSocketWriter.forward(new WebSocketMessage.RawTextMessage(payload));
+	@Override
+    public void sendRawTextMessage(final byte[] payload) {
+		mWriter.forward(new WebSocketMessage.RawTextMessage(payload));
 	}
 
 
-	public void sendBinaryMessage(byte[] payload) {
-		mWebSocketWriter.forward(new WebSocketMessage.BinaryMessage(payload));
+	@Override
+    public void sendBinaryMessage(final byte[] payload) {
+		mWriter.forward(new WebSocketMessage.BinaryMessage(payload));
 	}
 
 
 
-	public boolean isConnected() {
+	@Override
+    public boolean isConnected() {
 		return mSocket != null && mSocket.isConnected() && !mSocket.isClosed();
 	}
 
 
 
-	private void failConnection(WebSocketCloseNotification code, String reason) {
+	private void failConnection(final WebSocketCloseNotification code, final String reason) {
 		Log.d(TAG, "fail connection [code = " + code + ", reason = " + reason);
 
-		if (mWebSocketReader != null) {
-			mWebSocketReader.quit();
+		if (mReader != null) {
+			mReader.quit();
 
 			try {
-				mWebSocketReader.join();
-			} catch (InterruptedException e) {
+				mReader.join();
+			} catch (final InterruptedException e) {
 				e.printStackTrace();
 			}
 		} else {
 			Log.d(TAG, "mReader already NULL");
 		}
 
-		if (mWebSocketWriter != null) {
-			mWebSocketWriter.forward(new WebSocketMessage.Quit());
+		if (mWriter != null) {
+			mWriter.forward(new WebSocketMessage.Quit());
 
 			try {
-				mWebSocketWriter.join();
-			} catch (InterruptedException e) {
+				mWriterThread.join();
+			} catch (final InterruptedException e) {
 				e.printStackTrace();
 			}
 		} else {
@@ -145,15 +149,17 @@ public class WebSocketConnection implements WebSocket {
 
 
 
-	public void connect(URI webSocketURI, WebSocket.WebSocketConnectionObserver connectionObserver) throws WebSocketException {
+	@Override
+    public void connect(final URI webSocketURI, final WebSocket.WebSocketConnectionObserver connectionObserver) throws WebSocketException {
 		connect(webSocketURI, connectionObserver, new WebSocketOptions());
 	}
 
-	public void connect(URI webSocketURI, WebSocket.WebSocketConnectionObserver connectionObserver, WebSocketOptions options) throws WebSocketException {
+	@Override
+    public void connect(final URI webSocketURI, final WebSocket.WebSocketConnectionObserver connectionObserver, final WebSocketOptions options) throws WebSocketException {
 		connect(webSocketURI, null, connectionObserver, options);
 	}
 
-	public void connect(URI webSocketURI, String[] subprotocols, WebSocket.WebSocketConnectionObserver connectionObserver, WebSocketOptions options) throws WebSocketException {
+	public void connect(final URI webSocketURI, final String[] subprotocols, final WebSocket.WebSocketConnectionObserver connectionObserver, final WebSocketOptions options) throws WebSocketException {
 		if (isConnected()) {
 			throw new WebSocketException("already connected");
 		}
@@ -168,15 +174,16 @@ public class WebSocketConnection implements WebSocket {
 
 			this.mWebSocketSubprotocols = subprotocols;
 			this.mWebSocketConnectionObserver = new WeakReference<WebSocket.WebSocketConnectionObserver>(connectionObserver);
-			this.mWebSocketOptions = new WebSocketOptions(options);
+			this.mOptions = new WebSocketOptions(options);
 
 			connect();
 		}
 	}
 
-	public void disconnect() {
-		if (mWebSocketWriter != null && mWebSocketWriter.isAlive()) {
-			mWebSocketWriter.forward(new WebSocketMessage.Close());
+	@Override
+    public void disconnect() {
+		if (mWriter != null) {
+			mWriter.forward(new WebSocketMessage.Close());
 		} else {
 			Log.d(TAG, "Could not send WebSocket Close .. writer already null");
 		}
@@ -197,13 +204,13 @@ public class WebSocketConnection implements WebSocket {
 	}
 
 	private void connect() {
-		mSocketThread = new SocketThread(mWebSocketURI, mWebSocketOptions);
+		mSocketThread = new SocketThread(mWebSocketURI, mOptions);
 
 		mSocketThread.start();
 		synchronized (mSocketThread) {
 			try {
 				mSocketThread.wait();
-			} catch (InterruptedException e) {
+			} catch (final InterruptedException e) {
 			}
 		}
 		mSocketThread.getHandler().post(new Runnable() {
@@ -217,7 +224,7 @@ public class WebSocketConnection implements WebSocket {
 		synchronized (mSocketThread) {
 			try {
 				mSocketThread.wait();
-			} catch (InterruptedException e) {
+			} catch (final InterruptedException e) {
 			}
 		}
 
@@ -230,9 +237,9 @@ public class WebSocketConnection implements WebSocket {
 				createReader();
 				createWriter();
 
-				WebSocketMessage.ClientHandshake clientHandshake = new WebSocketMessage.ClientHandshake(mWebSocketURI, null, mWebSocketSubprotocols);
-				mWebSocketWriter.forward(clientHandshake);
-			} catch (Exception e) {
+				final WebSocketMessage.ClientHandshake clientHandshake = new WebSocketMessage.ClientHandshake(mWebSocketURI, null, mWebSocketSubprotocols);
+				mWriter.forward(clientHandshake);
+			} catch (final Exception e) {
 				onClose(WebSocketCloseNotification.INTERNAL_ERROR, e.getLocalizedMessage());
 			}
 		} else {
@@ -252,13 +259,14 @@ public class WebSocketConnection implements WebSocket {
 		 *  - has previous success connections
 		 *  - reconnect interval is set
 		 */
-		int interval = mWebSocketOptions.getReconnectInterval();
-		boolean shouldReconnect = mSocket != null && mSocket.isConnected() && mPreviousConnection && (interval > 0);
+		final int interval = mOptions.getReconnectInterval();
+		final boolean shouldReconnect = mSocket != null && mSocket.isConnected() && mPreviousConnection && (interval > 0);
 		if (shouldReconnect) {
 			Log.d(TAG, "WebSocket reconnection scheduled");
 			mHandler.postDelayed(new Runnable() {
 
-				public void run() {
+				@Override
+                public void run() {
 					Log.d(TAG, "WebSocket reconnecting...");
 					reconnect();
 				}
@@ -273,14 +281,14 @@ public class WebSocketConnection implements WebSocket {
 	 * @param code       Close code.
 	 * @param reason     Close reason (human-readable).
 	 */
-	private void onClose(WebSocketCloseNotification code, String reason) {
+	private void onClose(final WebSocketCloseNotification code, final String reason) {
 		boolean reconnecting = false;
 
 		if ((code == WebSocketCloseNotification.CANNOT_CONNECT) || (code == WebSocketCloseNotification.CONNECTION_LOST)) {
 			reconnecting = scheduleReconnect();
 		}
 
-		WebSocket.WebSocketConnectionObserver webSocketObserver = mWebSocketConnectionObserver.get();
+		final WebSocket.WebSocketConnectionObserver webSocketObserver = mWebSocketConnectionObserver.get();
 		if (webSocketObserver != null) {
 			try {
 				if (reconnecting) {
@@ -288,7 +296,7 @@ public class WebSocketConnection implements WebSocket {
 				} else {
 					webSocketObserver.onClose(code, reason);
 				}
-			} catch (Exception e) {
+			} catch (final Exception e) {
 				e.printStackTrace();
 			}
 		} else {
@@ -299,7 +307,7 @@ public class WebSocketConnection implements WebSocket {
 
 
 
-	protected void processAppMessage(Object message) {
+	protected void processAppMessage(final Object message) {
 	}
 
 
@@ -307,15 +315,10 @@ public class WebSocketConnection implements WebSocket {
 	 * Create WebSockets background writer.
 	 */
 	protected void createWriter() {
-		mWebSocketWriter = new WebSocketWriter(mHandler, mSocket, mWebSocketOptions, WS_WRITER);
-		mWebSocketWriter.start();
-
-		synchronized (mWebSocketWriter) {
-			try {
-				mWebSocketWriter.wait();
-			} catch (InterruptedException e) {
-			}
-		}
+	    
+        mWriterThread = new HandlerThread(WS_WRITER);
+        mWriterThread.start();
+		mWriter = new WebSocketWriter(mWriterThread.getLooper(), mHandler, mSocket, mOptions);
 
 		Log.d(TAG, "WebSocket writer created and started.");
 	}
@@ -326,24 +329,17 @@ public class WebSocketConnection implements WebSocket {
 	 */
 	protected void createReader() {
 
-		mWebSocketReader = new WebSocketReader(mHandler, mSocket, mWebSocketOptions, WS_READER);
-		mWebSocketReader.start();
-
-		synchronized (mWebSocketReader) {
-			try {
-				mWebSocketReader.wait();
-			} catch (InterruptedException e) {
-			}
-		}
+		mReader = new WebSocketReader(mHandler, mSocket, mOptions, WS_READER);
+		mReader.start();
 
 		Log.d(TAG, "WebSocket reader created and started.");
 	}
 
-	private void handleMessage(Message message) {
-		WebSocket.WebSocketConnectionObserver webSocketObserver = mWebSocketConnectionObserver.get();
+	private void handleMessage(final Message message) {
+		final WebSocket.WebSocketConnectionObserver webSocketObserver = mWebSocketConnectionObserver.get();
 
 		if (message.obj instanceof WebSocketMessage.TextMessage) {
-			WebSocketMessage.TextMessage textMessage = (WebSocketMessage.TextMessage) message.obj;
+			final WebSocketMessage.TextMessage textMessage = (WebSocketMessage.TextMessage) message.obj;
 
 			if (webSocketObserver != null) {
 				webSocketObserver.onTextMessage(textMessage.mPayload);
@@ -352,7 +348,7 @@ public class WebSocketConnection implements WebSocket {
 			}
 
 		} else if (message.obj instanceof WebSocketMessage.RawTextMessage) {
-			WebSocketMessage.RawTextMessage rawTextMessage = (WebSocketMessage.RawTextMessage) message.obj;
+			final WebSocketMessage.RawTextMessage rawTextMessage = (WebSocketMessage.RawTextMessage) message.obj;
 
 			if (webSocketObserver != null) {
 				webSocketObserver.onRawTextMessage(rawTextMessage.mPayload);
@@ -361,7 +357,7 @@ public class WebSocketConnection implements WebSocket {
 			}
 
 		} else if (message.obj instanceof WebSocketMessage.BinaryMessage) {
-			WebSocketMessage.BinaryMessage binaryMessage = (WebSocketMessage.BinaryMessage) message.obj;
+			final WebSocketMessage.BinaryMessage binaryMessage = (WebSocketMessage.BinaryMessage) message.obj;
 
 			if (webSocketObserver != null) {
 				webSocketObserver.onBinaryMessage(binaryMessage.mPayload);
@@ -370,27 +366,27 @@ public class WebSocketConnection implements WebSocket {
 			}
 
 		} else if (message.obj instanceof WebSocketMessage.Ping) {
-			WebSocketMessage.Ping ping = (WebSocketMessage.Ping) message.obj;
+			final WebSocketMessage.Ping ping = (WebSocketMessage.Ping) message.obj;
 			Log.d(TAG, "WebSockets Ping received");
 
-			WebSocketMessage.Pong pong = new WebSocketMessage.Pong();
+			final WebSocketMessage.Pong pong = new WebSocketMessage.Pong();
 			pong.mPayload = ping.mPayload;
-			mWebSocketWriter.forward(pong);
+			mWriter.forward(pong);
 
 		} else if (message.obj instanceof WebSocketMessage.Pong) {
-			WebSocketMessage.Pong pong = (WebSocketMessage.Pong) message.obj;
+			final WebSocketMessage.Pong pong = (WebSocketMessage.Pong) message.obj;
 
 			Log.d(TAG, "WebSockets Pong received" + pong.mPayload);
 
 		} else if (message.obj instanceof WebSocketMessage.Close) {
-			WebSocketMessage.Close close = (WebSocketMessage.Close) message.obj;
+			final WebSocketMessage.Close close = (WebSocketMessage.Close) message.obj;
 
 			Log.d(TAG, "WebSockets Close received (" + close.getCode() + " - " + close.getReason() + ")");
 
-			mWebSocketWriter.forward(new WebSocketMessage.Close(WebSocketCloseCode.NORMAL));
+			mWriter.forward(new WebSocketMessage.Close(WebSocketCloseCode.NORMAL));
 
 		} else if (message.obj instanceof WebSocketMessage.ServerHandshake) {
-			WebSocketMessage.ServerHandshake serverHandshake = (WebSocketMessage.ServerHandshake) message.obj;
+			final WebSocketMessage.ServerHandshake serverHandshake = (WebSocketMessage.ServerHandshake) message.obj;
 
 			Log.d(TAG, "opening handshake received");
 
@@ -412,11 +408,11 @@ public class WebSocketConnection implements WebSocket {
 			failConnection(WebSocketCloseNotification.PROTOCOL_ERROR, "WebSockets protocol violation");
 
 		} else if (message.obj instanceof WebSocketMessage.Error) {
-			WebSocketMessage.Error error = (WebSocketMessage.Error) message.obj;
+			final WebSocketMessage.Error error = (WebSocketMessage.Error) message.obj;
 			failConnection(WebSocketCloseNotification.INTERNAL_ERROR, "WebSockets internal error (" + error.mException.toString() + ")");
 
 		} else if (message.obj instanceof WebSocketMessage.ServerError) {
-			WebSocketMessage.ServerError error = (WebSocketMessage.ServerError) message.obj;
+			final WebSocketMessage.ServerError error = (WebSocketMessage.ServerError) message.obj;
 			failConnection(WebSocketCloseNotification.SERVER_ERROR, "Server error " + error.mStatusCode + " (" + error.mStatusMessage + ")");
 
 		} else {
@@ -439,7 +435,7 @@ public class WebSocketConnection implements WebSocket {
 		
 
 
-		public SocketThread(URI uri, WebSocketOptions options) {
+		public SocketThread(final URI uri, final WebSocketOptions options) {
 			this.setName(WS_CONNECTOR);
 			
 			this.mWebSocketURI = uri;
@@ -463,7 +459,7 @@ public class WebSocketConnection implements WebSocket {
 
 		public void startConnection() {	
 			try {
-				String host = mWebSocketURI.getHost();
+				final String host = mWebSocketURI.getHost();
 				int port = mWebSocketURI.getPort();
 
 				if (port == -1) {
@@ -483,7 +479,7 @@ public class WebSocketConnection implements WebSocket {
 
 				// Do not replace host string with InetAddress or you lose automatic host name verification
 				this.mSocket = factory.createSocket(host, port);
-			} catch (IOException e) {
+			} catch (final IOException e) {
 				this.mFailureMessage = e.getLocalizedMessage();
 			}
 			
@@ -496,7 +492,7 @@ public class WebSocketConnection implements WebSocket {
 			try {
 				mSocket.close();
 				this.mSocket = null;
-			} catch (IOException e) {
+			} catch (final IOException e) {
 				this.mFailureMessage = e.getLocalizedMessage();
 			}
 		}
@@ -519,7 +515,7 @@ public class WebSocketConnection implements WebSocket {
 
 
 
-		public ThreadHandler(WebSocketConnection webSocketConnection) {
+		public ThreadHandler(final WebSocketConnection webSocketConnection) {
 			super();
 
 			this.mWebSocketConnection = new WeakReference<WebSocketConnection>(webSocketConnection);
@@ -528,8 +524,8 @@ public class WebSocketConnection implements WebSocket {
 
 
 		@Override
-		public void handleMessage(Message message) {
-			WebSocketConnection webSocketConnection = mWebSocketConnection.get();
+		public void handleMessage(final Message message) {
+			final WebSocketConnection webSocketConnection = mWebSocketConnection.get();
 			if (webSocketConnection != null) {
 				webSocketConnection.handleMessage(message);
 			}

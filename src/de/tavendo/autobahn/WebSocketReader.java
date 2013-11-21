@@ -58,7 +58,7 @@ public class WebSocketReader extends Thread {
 
 	private final byte[] mNetworkBuffer;
 	private final ByteBuffer mApplicationBuffer;
-	private NoCopyByteArrayOutputStream mMessagePayload;
+	private final NoCopyByteArrayOutputStream mMessagePayload;
 
 	private ReaderState mState;
 
@@ -66,7 +66,7 @@ public class WebSocketReader extends Thread {
 	private int mMessageOpcode;
 
 	private WebSocketFrameHeader mFrameHeader;
-	private Utf8Validator mUTF8Validator = new Utf8Validator();
+	private final Utf8Validator mUTF8Validator = new Utf8Validator();
 
 
 
@@ -77,7 +77,7 @@ public class WebSocketReader extends Thread {
 	 * @param master    The message handler of master (foreground thread).
 	 * @param socket    The socket channel created on foreground thread.
 	 */
-	public WebSocketReader(Handler master, Socket socket, WebSocketOptions options, String threadName) {
+	public WebSocketReader(final Handler master, final Socket socket, final WebSocketOptions options, final String threadName) {
 		super(threadName);
 
 		this.mWebSocketConnectionHandler = master;
@@ -114,9 +114,9 @@ public class WebSocketReader extends Thread {
 	 *
 	 * @param message       Message to send to master.
 	 */
-	protected void notify(Object message) {
+	protected void notify(final Object message) {
 
-		Message msg = mWebSocketConnectionHandler.obtainMessage();
+		final Message msg = mWebSocketConnectionHandler.obtainMessage();
 		msg.obj = message;
 		mWebSocketConnectionHandler.sendMessage(msg);
 	}
@@ -133,14 +133,14 @@ public class WebSocketReader extends Thread {
 			// need at least 2 bytes from WS frame header to start processing
 			if (mApplicationBuffer.position() >= 2) {
 
-				byte b0 = mApplicationBuffer.get(0);
-				boolean fin = (b0 & 0x80) != 0;
-				int rsv = (b0 & 0x70) >> 4;
-				int opcode = b0 & 0x0f;
+				final byte b0 = mApplicationBuffer.get(0);
+				final boolean fin = (b0 & 0x80) != 0;
+				final int rsv = (b0 & 0x70) >> 4;
+				final int opcode = b0 & 0x0f;
 
-				byte b1 = mApplicationBuffer.get(1);
-				boolean masked = (b1 & 0x80) != 0;
-				int payload_len1 = b1 & 0x7f;
+				final byte b1 = mApplicationBuffer.get(1);
+				final boolean masked = (b1 & 0x80) != 0;
+				final int payload_len1 = b1 & 0x7f;
 
 				// now check protocol compliance
 
@@ -180,7 +180,7 @@ public class WebSocketReader extends Thread {
 					}
 				}
 
-				int mask_len = masked ? 4 : 0;
+				final int mask_len = masked ? 4 : 0;
 				int header_len = 0;
 
 				if (payload_len1 < 126) {
@@ -241,7 +241,7 @@ public class WebSocketReader extends Thread {
 					mFrameHeader.setTotalLen(mFrameHeader.getHeaderLength() + mFrameHeader.getPayloadLength());
 
 					if (masked) {
-						byte[] mask = new byte[4];
+						final byte[] mask = new byte[4];
 						for (int j = 0; j < 4; ++j) {
 							mask[i] = (byte) (0xff & mApplicationBuffer.get(i + j));
 						}
@@ -277,11 +277,11 @@ public class WebSocketReader extends Thread {
 
 				// cut out frame payload
 				byte[] framePayload = null;
-				int oldPosition = mApplicationBuffer.position();
+				final int oldPosition = mApplicationBuffer.position();
 				if (mFrameHeader.getPayloadLength() > 0) {
 					framePayload = new byte[mFrameHeader.getPayloadLength()];
 					mApplicationBuffer.position(mFrameHeader.getHeaderLength());
-					mApplicationBuffer.get(framePayload, 0, (int) mFrameHeader.getPayloadLength());
+					mApplicationBuffer.get(framePayload, 0, mFrameHeader.getPayloadLength());
 				}
 				mApplicationBuffer.position(mFrameHeader.getTotalLength());
 				mApplicationBuffer.limit(oldPosition);
@@ -310,10 +310,10 @@ public class WebSocketReader extends Thread {
 							// parse and check close reason
 							if (mFrameHeader.getPayloadLength() > 2) {
 
-								byte[] ra = new byte[mFrameHeader.getPayloadLength() - 2];
+								final byte[] ra = new byte[mFrameHeader.getPayloadLength() - 2];
 								System.arraycopy(framePayload, 2, ra, 0, mFrameHeader.getPayloadLength() - 2);
 
-								Utf8Validator val = new Utf8Validator();
+								final Utf8Validator val = new Utf8Validator();
 								val.validate(ra);
 								if (!val.isValid()) {
 									throw new WebSocketException("invalid close reasons (not UTF-8)");
@@ -385,7 +385,7 @@ public class WebSocketReader extends Thread {
 							} else {
 
 								// dispatch WS text message as Java String (previously already validated)
-								String s = new String(mMessagePayload.toByteArray(), WebSocket.UTF8_ENCODING);
+								final String s = new String(mMessagePayload.toByteArray(), WebSocket.UTF8_ENCODING);
 								onTextMessage(s);
 							}
 
@@ -426,7 +426,7 @@ public class WebSocketReader extends Thread {
 	 * 
 	 * @param success	Success handshake flag
 	 */
-	protected void onHandshake(boolean success) {
+	protected void onHandshake(final boolean success) {
 
 		notify(new WebSocketMessage.ServerHandshake(success));
 	}
@@ -435,7 +435,7 @@ public class WebSocketReader extends Thread {
 	/**
 	 * WebSockets close received, default notifies master.
 	 */
-	protected void onClose(int code, String reason) {
+	protected void onClose(final int code, final String reason) {
 
 		notify(new WebSocketMessage.Close(code, reason));
 	}
@@ -446,7 +446,7 @@ public class WebSocketReader extends Thread {
 	 *
 	 * @param payload    Ping payload or null.
 	 */
-	protected void onPing(byte[] payload) {
+	protected void onPing(final byte[] payload) {
 
 		notify(new WebSocketMessage.Ping(payload));
 	}
@@ -457,7 +457,7 @@ public class WebSocketReader extends Thread {
 	 *
 	 * @param payload    Pong payload or null.
 	 */
-	protected void onPong(byte[] payload) {
+	protected void onPong(final byte[] payload) {
 
 		notify(new WebSocketMessage.Pong(payload));
 	}
@@ -471,7 +471,7 @@ public class WebSocketReader extends Thread {
 	 * @param payload    Text message payload as Java String decoded
 	 *                   from raw UTF-8 payload or null (empty payload).
 	 */
-	protected void onTextMessage(String payload) {
+	protected void onTextMessage(final String payload) {
 
 		notify(new WebSocketMessage.TextMessage(payload));
 	}
@@ -485,7 +485,7 @@ public class WebSocketReader extends Thread {
 	 * @param payload    Text message payload as raw UTF-8 octets or
 	 *                   null (empty payload).
 	 */
-	protected void onRawTextMessage(byte[] payload) {
+	protected void onRawTextMessage(final byte[] payload) {
 
 		notify(new WebSocketMessage.RawTextMessage(payload));
 	}
@@ -496,7 +496,7 @@ public class WebSocketReader extends Thread {
 	 *
 	 * @param payload    Binary message payload or null (empty payload).
 	 */
-	protected void onBinaryMessage(byte[] payload) {
+	protected void onBinaryMessage(final byte[] payload) {
 
 		notify(new WebSocketMessage.BinaryMessage(payload));
 	}
@@ -517,7 +517,7 @@ public class WebSocketReader extends Thread {
 				/// \todo process & verify handshake from server
 				/// \todo forward subprotocol, if any
 
-				int oldPosition = mApplicationBuffer.position();
+				final int oldPosition = mApplicationBuffer.position();
 
 				// Check HTTP status code
 				boolean serverError = false;
@@ -526,7 +526,7 @@ public class WebSocketReader extends Thread {
 						mApplicationBuffer.get(2) == 'T' &&
 						mApplicationBuffer.get(3) == 'P') {
 
-					Pair<Integer, String> status = parseHTTPStatus();
+					final Pair<Integer, String> status = parseHTTPStatus();
 					if (status.first >= 300) {
 						// Invalid status code for success connection
 						notify(new WebSocketMessage.ServerError(status.first, status.second));
@@ -570,7 +570,7 @@ public class WebSocketReader extends Thread {
 		++beg;
 		int statusCode = 0;
 		for (int i = 0; beg + i < end; ++i) {
-			int digit = (mApplicationBuffer.get(beg + i) - 0x30);
+			final int digit = (mApplicationBuffer.get(beg + i) - 0x30);
 			statusCode *= 10;
 			statusCode += digit;
 		}
@@ -580,11 +580,11 @@ public class WebSocketReader extends Thread {
 		for (eol = end; eol < mApplicationBuffer.position(); ++eol) {
 			if (mApplicationBuffer.get(eol) == 0x0d) break;
 		}
-		int statusMessageLength = eol - end;
-		byte[] statusBuf = new byte[statusMessageLength];
+		final int statusMessageLength = eol - end;
+		final byte[] statusBuf = new byte[statusMessageLength];
 		mApplicationBuffer.position(end);
 		mApplicationBuffer.get(statusBuf, 0, statusMessageLength);
-		String statusMessage = new String(statusBuf, WebSocket.UTF8_ENCODING);
+		final String statusMessage = new String(statusBuf, WebSocket.UTF8_ENCODING);
 		Log.w(TAG, String.format("Status: %d (%s)", statusCode, statusMessage));
 		return new Pair<Integer, String>(statusCode, statusMessage);
 	}
@@ -613,14 +613,11 @@ public class WebSocketReader extends Thread {
 	 */
 	@Override
 	public void run() {		
-		synchronized (this) {
-			notifyAll();
-		}
 		
 		InputStream inputStream = null;
 		try {
 			inputStream = mSocket.getInputStream();
-		} catch (IOException e) {
+		} catch (final IOException e) {
 			Log.e(TAG, e.getLocalizedMessage());
 			return;
 		}
@@ -628,46 +625,48 @@ public class WebSocketReader extends Thread {
 		this.mInputStream = inputStream;
 
 		Log.d(TAG, "WebSocker reader running.");
-		mApplicationBuffer.clear();
 
-		while (!mStopped) {
-			try {
+        try {
 
-				int bytesRead = mInputStream.read(mNetworkBuffer);
-				if (bytesRead > 0) {
-					mApplicationBuffer.put(mNetworkBuffer, 0, bytesRead);
-					while (consumeData()) {
-					}
-				} else if (bytesRead == -1) {
-					Log.d(TAG, "run() : ConnectionLost");
+            mApplicationBuffer.clear();
+            do { 
+                final int bytesRead = mInputStream.read(mNetworkBuffer);
+                if (bytesRead > 0) {
+                    mApplicationBuffer.put(mNetworkBuffer, 0, bytesRead);
+                    while (consumeData()) {
+                    }
+                } else if (bytesRead == -1) {
+                    Log.d(TAG, "run() : ConnectionLost");
 
-					notify(new WebSocketMessage.ConnectionLost());
-					this.mStopped = true;
-				} else {
-					Log.e(TAG, "WebSocketReader read() failed.");
-				}
-				
-			} catch (WebSocketException e) {
-				Log.d(TAG, "run() : WebSocketException (" + e.toString() + ")");
+                    notify(new WebSocketMessage.ConnectionLost());
+                    this.mStopped = true;
+                } else {
+                    Log.e(TAG, "WebSocketReader read() failed.");
+                }
+            } while (!mStopped);
+            
+        } catch (final WebSocketException e) {
+            Log.d(TAG, "run() : WebSocketException (" + e.toString() + ")");
 
-				// wrap the exception and notify master
-				notify(new WebSocketMessage.ProtocolViolation(e));
-			} catch (SocketException e) {
-				Log.d(TAG, "run() : SocketException (" + e.toString() + ")");
+            // wrap the exception and notify master
+            notify(new WebSocketMessage.ProtocolViolation(e));
+        } catch (final SocketException e) {
+            Log.d(TAG, "run() : SocketException (" + e.toString() + ")");
 
-				// wrap the exception and notify master
-				notify(new WebSocketMessage.ConnectionLost());
-			} catch (IOException e) {
-				Log.d(TAG, "run() : IOException (" + e.toString() + ")");
-				
-				notify(new WebSocketMessage.ConnectionLost());
-			} catch (Exception e) {
-				Log.d(TAG, "run() : Exception (" + e.toString() + ")");
+            // wrap the exception and notify master
+            notify(new WebSocketMessage.ConnectionLost());
+        } catch (final IOException e) {
+            Log.d(TAG, "run() : IOException (" + e.toString() + ")");
+            
+            notify(new WebSocketMessage.ConnectionLost());
+        } catch (final Exception e) {
+            Log.d(TAG, "run() : Exception (" + e.toString() + ")");
 
-				// wrap the exception and notify master
-				notify(new WebSocketMessage.Error(e));
-			}
-		}
+            // wrap the exception and notify master
+            notify(new WebSocketMessage.Error(e));
+        } finally {
+            mStopped = true;
+        }
 
 
 		Log.d(TAG, "WebSocket reader ended.");

@@ -49,7 +49,7 @@ public class EchoActivity extends Activity implements WebSocketConnectionObserve
 
 
 	@Override
-	public void onCreate(Bundle savedInstanceState) {
+	public void onCreate(final Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_echo);
 
@@ -63,7 +63,7 @@ public class EchoActivity extends Activity implements WebSocketConnectionObserve
 		mConnectButton.setOnClickListener(new OnClickListener() {
 
 			@Override
-			public void onClick(View v) {
+			public void onClick(final View v) {
 				if (mIsConnected) {
 					disconnect();
 				} else {
@@ -77,7 +77,7 @@ public class EchoActivity extends Activity implements WebSocketConnectionObserve
 		mSendButton.setOnClickListener(new OnClickListener() {
 
 			@Override
-			public void onClick(View v) {
+			public void onClick(final View v) {
 				send();
 			}
 		});
@@ -87,7 +87,7 @@ public class EchoActivity extends Activity implements WebSocketConnectionObserve
 		mRepeatButton.setOnClickListener(new OnClickListener() {
 
 			@Override
-			public void onClick(View v) {
+			public void onClick(final View v) {
 				if (!mIsRepeating) {
 					mRepeatButton.setText("Stop");
 					mSendButton.setEnabled(false);
@@ -102,22 +102,22 @@ public class EchoActivity extends Activity implements WebSocketConnectionObserve
 	}
 
 	@Override
-	public boolean onCreateOptionsMenu(Menu menu) {
-		MenuInflater inflater = getMenuInflater();
+	public boolean onCreateOptionsMenu(final Menu menu) {
+		final MenuInflater inflater = getMenuInflater();
 		inflater.inflate(R.menu.activity_echo, menu);
 
 		return true;
 	}
 
 	@Override
-	public boolean onOptionsItemSelected(MenuItem item) {
-		switch (item.getItemId()) {
-		case R.id.menu_tls_enable:
+	public boolean onOptionsItemSelected(final MenuItem item) {
+	    // it's a lib project now, so this id can't be used in a case statement
+		if (item.getItemId() == R.id.menu_tls_enable)  {
 			tlsToggle(item);
 			return true;
-		default:
-			return super.onOptionsItemSelected(item);
-		}
+		} 
+
+        return super.onOptionsItemSelected(item);
 	}
 
 	@Override
@@ -143,12 +143,12 @@ public class EchoActivity extends Activity implements WebSocketConnectionObserve
 
 			mConnection.connect(mServerURI, this);
 
-		} catch (URISyntaxException e) {
-			String message = e.getLocalizedMessage();
+		} catch (final URISyntaxException e) {
+			final String message = e.getLocalizedMessage();
 			Log.e(TAG, message);
 			displayResponse(message);
-		} catch (WebSocketException e) {
-			String message = e.getLocalizedMessage();
+		} catch (final WebSocketException e) {
+			final String message = e.getLocalizedMessage();
 			Log.e(TAG, message);
 			displayResponse(message);
 		}
@@ -158,7 +158,7 @@ public class EchoActivity extends Activity implements WebSocketConnectionObserve
 		mConnection.disconnect();
 	}
 
-	public void tlsToggle(MenuItem item) {
+	public void tlsToggle(final MenuItem item) {
 		mTLSEnabled = !mTLSEnabled;
 
 		if (mTLSEnabled) {
@@ -170,7 +170,7 @@ public class EchoActivity extends Activity implements WebSocketConnectionObserve
 
 	public void send() {
 		if (mIsConnected) {
-			String message = mMessageEditText.getText().toString();
+			final String message = mMessageEditText.getText().toString();
 
 			mConnection.sendTextMessage(message);
 		}
@@ -191,8 +191,8 @@ public class EchoActivity extends Activity implements WebSocketConnectionObserve
 		}
 	}
 
-	public void displayResponse(String message) {		
-		TextView textView = new TextView(this);
+	public void displayResponse(final String message) {		
+		final TextView textView = new TextView(this);
 		textView.setText(mMessageIndex + ", " + message);
 		mResponseLinearLayout.addView(textView);
 
@@ -217,13 +217,13 @@ public class EchoActivity extends Activity implements WebSocketConnectionObserve
 		mSendButton.setEnabled(true);
 		mRepeatButton.setEnabled(true);
 
-		String message = "Connection opened to: " + mServerURI.toString();
+		final String message = "Connection opened to: " + mServerURI.toString();
 		Log.d(TAG, message);
 		displayResponse(message);
 	}
 
 	@Override
-	public void onClose(WebSocketCloseNotification code, String reason) {
+	public void onClose(final WebSocketCloseNotification code, final String reason) {
 		this.mIsConnected = false;
 		this.mIsRepeating = false;
 		this.mConnection = null;
@@ -233,24 +233,24 @@ public class EchoActivity extends Activity implements WebSocketConnectionObserve
 		mSendButton.setEnabled(false);
 		mRepeatButton.setEnabled(false);
 
-		String message = "Close: " + code.name() + ", " + reason;
+		final String message = "Close: " + code.name() + ", " + reason;
 		Log.d(TAG, message);
 		displayResponse(message);
 	}
 
 	@Override
-	public void onTextMessage(String payload) {
-		String message = "ECHO: " + payload;
+	public void onTextMessage(final String payload) {
+		final String message = "ECHO: " + payload;
 
 		Log.d(TAG, message);
 		displayResponse(message);
 	}
 
 	@Override
-	public void onRawTextMessage(byte[] payload) {
+	public void onRawTextMessage(final byte[] payload) {
 	}
 
 	@Override
-	public void onBinaryMessage(byte[] payload) {
+	public void onBinaryMessage(final byte[] payload) {
 	}
 }
