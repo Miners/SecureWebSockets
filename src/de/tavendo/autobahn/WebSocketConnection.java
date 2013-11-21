@@ -97,15 +97,16 @@ public class WebSocketConnection implements WebSocket {
 
 	private void failConnection(final WebSocketCloseNotification code, final String reason) {
 		Log.d(TAG, "fail connection [code = " + code + ", reason = " + reason);
+		
+		final SocketThread socketThread = mSocketThread;
+		if (socketThread == null) {
+		    Log.d(TAG, "Already disconnected");
+		    return;
+		}
 
 		if (mReader != null) {
 			mReader.quit();
 
-			try {
-				mReader.join();
-			} catch (final InterruptedException e) {
-				e.printStackTrace();
-			}
 		} else {
 			Log.d(TAG, "mReader already NULL");
 		}
@@ -122,26 +123,37 @@ public class WebSocketConnection implements WebSocket {
 			Log.d(TAG, "mWriter already NULL");
 		}
 
-		if (mSocket != null) {
-			mSocketThread.getHandler().post(new Runnable() {
+		if (mSocket != null && socketThread != null) {
+			socketThread.getHandler().post(new Runnable() {
 
 				@Override
 				public void run() {
-					mSocketThread.stopConnection();
+					socketThread.stopConnection();
 				}
 			});
 		} else {
 			Log.d(TAG, "mTransportChannel already NULL");
 		}
 		
-		mSocketThread.getHandler().post(new Runnable() {
-			
-			@Override
-			public void run() {
-				Looper.myLooper().quit();
-			}
-		});
+		if (socketThread != null) {
+            socketThread.getHandler().post(new Runnable() {
+                
+                @Override
+                public void run() {
+                    Looper.myLooper().quit();
+                    mSocketThread = null;
+                }
+            });
+		}
 
+		// wait until we've posted the socket close
+		if (mReader != null) {
+			try {
+				mReader.join();
+			} catch (final InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
 		onClose(code, reason);
 
 		Log.d(TAG, "worker threads stopped");
@@ -409,6 +421,7 @@ public class WebSocketConnection implements WebSocket {
 
 		} else if (message.obj instanceof WebSocketMessage.Error) {
 			final WebSocketMessage.Error error = (WebSocketMessage.Error) message.obj;
+			error.mException.printStackTrace();
 			failConnection(WebSocketCloseNotification.INTERNAL_ERROR, "WebSockets internal error (" + error.mException.toString() + ")");
 
 		} else if (message.obj instanceof WebSocketMessage.ServerError) {

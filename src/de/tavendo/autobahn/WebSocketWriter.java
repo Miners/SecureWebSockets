@@ -363,19 +363,7 @@ public class WebSocketWriter extends Handler {
 	 */
 	protected void processMessage(final Object msg) throws IOException, WebSocketException {
 
-	    if (msg == this) {
-	        // special initialization that must not be on UI thread
-                
-            //This can not be on the UI thread as it will puke during hostname resolution
-            OutputStream outputStream = null;
-            try {
-                outputStream = socket.getOutputStream();
-            } catch (final IOException e) {
-                Log.e(TAG, e.getLocalizedMessage());
-            }
-            
-            this.mOutputStream = outputStream;
-	    } else if (msg instanceof WebSocketMessage.TextMessage) {
+	    if (msg instanceof WebSocketMessage.TextMessage) {
 			sendTextMessage((WebSocketMessage.TextMessage) msg);
 		} else if (msg instanceof WebSocketMessage.RawTextMessage) {
 			sendRawTextMessage((WebSocketMessage.RawTextMessage) msg);
@@ -401,11 +389,13 @@ public class WebSocketWriter extends Handler {
 	@Override
     public void handleMessage(final Message message) {
 		try {
+		    processInitialization();
+		    
 			mApplicationBuffer.clear();
 			processMessage(message.obj);
 			mApplicationBuffer.flip();
 
-			mOutputStream.write(mApplicationBuffer.array(), mApplicationBuffer.position(), mApplicationBuffer.limit());
+            mOutputStream.write(mApplicationBuffer.array(), mApplicationBuffer.position(), mApplicationBuffer.limit());
 		} catch (final SocketException e) {
 			Log.e(TAG, "run() : SocketException (" + e.toString() + ")");
 
@@ -418,7 +408,25 @@ public class WebSocketWriter extends Handler {
 		}
 	}
 
-	/**
+    /** special initialization that must not be on UI thread */
+	private void processInitialization() {
+	    
+	    if (mOutputStream != null)
+	        return; // already done
+            
+        //This can not be on the UI thread as it will puke during hostname resolution
+        OutputStream outputStream = null;
+        try {
+            outputStream = socket.getOutputStream();
+        } catch (final IOException e) {
+            Log.e(TAG, e.getLocalizedMessage());
+        }
+        
+        mOutputStream = outputStream; 
+    }
+
+
+    /**
 	 * Process message other than plain WebSockets or control message.
 	 * This is intended to be overridden in derived classes.
 	 *

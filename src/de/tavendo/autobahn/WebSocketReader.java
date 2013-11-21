@@ -103,7 +103,6 @@ public class WebSocketReader extends Thread {
 
 		mStopped = true;
 			
-
 		Log.d(TAG, "quit");
 	}
 
@@ -624,12 +623,13 @@ public class WebSocketReader extends Thread {
 
 		this.mInputStream = inputStream;
 
-		Log.d(TAG, "WebSocker reader running.");
+		Log.d(TAG, "WebSocket reader running.");
 
         try {
 
             mApplicationBuffer.clear();
             do { 
+                
                 final int bytesRead = mInputStream.read(mNetworkBuffer);
                 if (bytesRead > 0) {
                     mApplicationBuffer.put(mNetworkBuffer, 0, bytesRead);
@@ -656,9 +656,10 @@ public class WebSocketReader extends Thread {
             // wrap the exception and notify master
             notify(new WebSocketMessage.ConnectionLost());
         } catch (final IOException e) {
-            Log.d(TAG, "run() : IOException (" + e.toString() + ")");
+            Log.d(TAG, "run() : IOException (" + e.toString() + "); stopped=" + mStopped);
             
-            notify(new WebSocketMessage.ConnectionLost());
+            if (!mStopped) // we stopped manually, don't throw exception
+                notify(new WebSocketMessage.ConnectionLost());
         } catch (final Exception e) {
             Log.d(TAG, "run() : Exception (" + e.toString() + ")");
 
