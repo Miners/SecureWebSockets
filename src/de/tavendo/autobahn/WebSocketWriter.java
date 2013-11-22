@@ -70,6 +70,8 @@ public class WebSocketWriter extends Handler {
 		
 		this.socket = socket;
 		
+		this.mApplicationBuffer = ByteBuffer.allocate(options.getMaxFramePayloadSize() + 14);
+		
 		forward(this);
 		
 		//this breaks when testing on local network because it tries to do a dns request on the ui thread
@@ -81,8 +83,6 @@ public class WebSocketWriter extends Handler {
 //		}
 //		
 //		this.mOutputStream = outputStream;
-		
-		this.mApplicationBuffer = ByteBuffer.allocate(options.getMaxFramePayloadSize() + 14);
 
 		Log.d(TAG, "WebSocket writer created.");
 	}
