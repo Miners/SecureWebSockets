@@ -377,10 +377,6 @@ public class WebSocketWriter extends Handler {
 			sendClose((WebSocketMessage.Close) msg);
 		} else if (msg instanceof WebSocketMessage.ClientHandshake) {
 			sendClientHandshake((WebSocketMessage.ClientHandshake) msg);
-		} else if (msg instanceof WebSocketMessage.Quit) {
-			Looper.myLooper().quit();
-
-			Log.d(TAG, "WebSocket writer ended.");
 		} else {
 			processAppMessage(msg);
 		}
@@ -389,6 +385,14 @@ public class WebSocketWriter extends Handler {
 	@Override
     public void handleMessage(final Message message) {
 		try {
+		    
+		    if (message.obj instanceof WebSocketMessage.Quit) {
+                getLooper().quit();
+
+                Log.d(TAG, "WebSocket writer ended.");
+                return;
+		    }
+		    
 		    processInitialization();
 		    
 			mApplicationBuffer.clear();
@@ -403,26 +407,21 @@ public class WebSocketWriter extends Handler {
 		} catch (final IOException e) {
 			Log.e(TAG, "run() : IOException (" + e.toString() + ")");
 
+			notify(new WebSocketMessage.ConnectionLost());
 		} catch (final Exception e) {
 			notify(new WebSocketMessage.Error(e));
 		}
 	}
 
-    /** special initialization that must not be on UI thread */
-	private void processInitialization() {
+    /** special initialization that must not be on UI thread 
+     * @throws IOException */
+	private void processInitialization() throws IOException {
 	    
 	    if (mOutputStream != null)
 	        return; // already done
             
         //This can not be on the UI thread as it will puke during hostname resolution
-        OutputStream outputStream = null;
-        try {
-            outputStream = socket.getOutputStream();
-        } catch (final IOException e) {
-            Log.e(TAG, e.getLocalizedMessage());
-        }
-        
-        mOutputStream = outputStream; 
+        mOutputStream = socket.getOutputStream(); 
     }
 
 

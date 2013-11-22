@@ -111,7 +111,7 @@ public class WebSocketConnection implements WebSocket {
 			Log.d(TAG, "mReader already NULL");
 		}
 
-		if (mWriter != null) {
+		if (mWriter != null && mWriterThread.isAlive()) {
 			mWriter.forward(new WebSocketMessage.Quit());
 
 			try {

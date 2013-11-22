@@ -617,7 +617,7 @@ public class WebSocketReader extends Thread {
 		try {
 			inputStream = mSocket.getInputStream();
 		} catch (final IOException e) {
-			Log.e(TAG, e.getLocalizedMessage());
+			Log.e(TAG, "pre-run() : " + e.getLocalizedMessage());
 			return;
 		}
 
