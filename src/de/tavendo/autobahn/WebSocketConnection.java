@@ -20,6 +20,7 @@ package de.tavendo.autobahn;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 
@@ -415,6 +416,7 @@ public class WebSocketConnection implements WebSocket {
 	    public static final int STOP  = 2;
 	    
 		private final URI mWebSocketURI;
+		private final WebSocketOptions mOptions;
 
 		private Socket mSocket = null;
 		private String mFailureMessage = null;
@@ -423,6 +425,7 @@ public class WebSocketConnection implements WebSocket {
 		public SocketHandler(final Handler masterHandler, final HandlerThread socketThread, final URI uri, final WebSocketOptions options) {
 		    super(socketThread.getLooper());
 			
+		    mOptions = options;
 		    mMasterHandler = masterHandler;
 		    mWebSocketURI = uri;
 		}
@@ -461,7 +464,13 @@ public class WebSocketConnection implements WebSocket {
 				}
 
 				// Do not replace host string with InetAddress or you lose automatic host name verification
-				this.mSocket = factory.createSocket(host, port);
+				mSocket = factory.createSocket();
+				mSocket.connect(new InetSocketAddress(host, port), mOptions.getSocketConnectTimeout());
+				
+				// before doing data transfer, update some socket settings
+				mSocket.setSoTimeout(mOptions.getSocketReceiveTimeout());
+				mSocket.setTcpNoDelay(mOptions.getTcpNoDelay());
+				
 			} catch (final IOException e) {
 				this.mFailureMessage = e.getLocalizedMessage();
 			}
