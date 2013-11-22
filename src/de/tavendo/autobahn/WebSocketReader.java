@@ -18,6 +18,7 @@
 
 package de.tavendo.autobahn;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
@@ -622,7 +623,7 @@ public class WebSocketReader extends Thread {
 			return;
 		}
 
-		this.mInputStream = inputStream;
+		this.mInputStream = new BufferedInputStream(inputStream);
 
 		Log.d(TAG, "WebSocket reader running.");
 

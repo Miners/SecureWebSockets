@@ -139,6 +139,8 @@ public class WebSocketConnection implements WebSocket {
 			}
 		}
 		onClose(code, reason);
+		
+		mSocket = null;
 
 		Log.d(TAG, "worker threads stopped");
 	}
