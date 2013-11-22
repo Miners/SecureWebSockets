@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 
 import android.os.Handler;
@@ -630,18 +631,25 @@ public class WebSocketReader extends Thread {
             mApplicationBuffer.clear();
             do { 
                 
-                final int bytesRead = mInputStream.read(mNetworkBuffer);
-                if (bytesRead > 0) {
-                    mApplicationBuffer.put(mNetworkBuffer, 0, bytesRead);
-                    while (consumeData()) {
-                    }
-                } else if (bytesRead == -1) {
-                    Log.d(TAG, "run() : ConnectionLost");
+                try {
+                    final int bytesRead = mInputStream.read(mNetworkBuffer);
+                    if (bytesRead > 0) {
+                        mApplicationBuffer.put(mNetworkBuffer, 0, bytesRead);
+                        while (consumeData()) {
+                        }
+                    } else if (bytesRead == -1) {
+                        Log.d(TAG, "run() : ConnectionLost");
 
-                    notify(new WebSocketMessage.ConnectionLost());
-                    this.mStopped = true;
-                } else {
-                    Log.e(TAG, "WebSocketReader read() failed.");
+                        notify(new WebSocketMessage.ConnectionLost());
+                        this.mStopped = true;
+                    } else {
+                        Log.e(TAG, "WebSocketReader read() failed.");
+                    }
+                } catch (final IOException e) {
+                    if (e instanceof SocketTimeoutException) {
+                        // I *think* this is fine?
+//                        Log.v(TAG, "run() socket timeout");
+                    } else throw e;
                 }
             } while (!mStopped);
             
