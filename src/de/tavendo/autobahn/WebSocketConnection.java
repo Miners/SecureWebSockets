@@ -458,9 +458,12 @@ public class WebSocketConnection implements WebSocket {
 					}
 				}
 				
-				SocketFactory factory = null;
+				final SocketFactory factory;
 				if (mWebSocketURI.getScheme().equalsIgnoreCase(WSS_URI_SCHEME)) {
-					factory = SSLCertificateSocketFactory.getDefault();
+				    if (mOptions.getUseInsecureSocketFactory())
+                        factory = SSLCertificateSocketFactory.getInsecure(mOptions.getSocketConnectTimeout(), null);
+				    else
+                        factory = SSLCertificateSocketFactory.getDefault();
 				} else {
 					factory = SocketFactory.getDefault();
 				}
