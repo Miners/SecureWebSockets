@@ -227,7 +227,7 @@ public class WebSocketConnection implements WebSocket {
 				onClose(WebSocketCloseNotification.INTERNAL_ERROR, e.getLocalizedMessage());
 			}
 		} else {
-			onClose(WebSocketCloseNotification.CANNOT_CONNECT, "could not connect to WebSockets server");
+			onClose(WebSocketCloseNotification.CANNOT_CONNECT, "could not connect to WebSockets server: " + mSocketHandler.getFailureMessage());
 		}
 	}
 
