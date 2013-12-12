@@ -199,7 +199,7 @@ public class WebSocketOptions {
      * about to be established, the TCP socket connect will timeout
      * after this period.
      *
-     * DEFAULT: 3000
+     * DEFAULT: 6000
      *
      * @param timeoutMs  Socket connect timeout in ms.
      */
