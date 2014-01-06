@@ -172,7 +172,8 @@ public class WebSocketConnection implements WebSocket {
 
 			this.mWebSocketSubprotocols = subprotocols;
 			this.mWebSocketConnectionObserver = connectionObserver;
-			this.mOptions = new WebSocketOptions(options);
+//			this.mOptions = new WebSocketOptions(options);
+			this.mOptions = options; // the copy constructor is not a terrible idea, but it's wasteful
 
 			connect();
 		}

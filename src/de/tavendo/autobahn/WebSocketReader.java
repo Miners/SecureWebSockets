@@ -88,8 +88,8 @@ public class WebSocketReader extends Thread {
 		this.mWebSocketOptions = options;
 
 		this.mNetworkBuffer = new byte[4096];
-		this.mApplicationBuffer = ByteBuffer.allocateDirect(options.getMaxFramePayloadSize() + 14);
-		this.mMessagePayload = new NoCopyByteArrayOutputStream(options.getMaxMessagePayloadSize());
+		this.mApplicationBuffer = options.createReaderBuffer();
+		this.mMessagePayload = options.createMessagePayloadStream();
 
 		this.mFrameHeader = null;
 		this.mState = ReaderState.STATE_CONNECTING;

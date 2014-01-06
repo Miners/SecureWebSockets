@@ -70,7 +70,7 @@ public class WebSocketWriter extends Handler {
 		
 		this.socket = socket;
 		
-		this.mApplicationBuffer = ByteBuffer.allocate(options.getMaxFramePayloadSize() + 14);
+		this.mApplicationBuffer = options.createWriterBuffer();
 		
 		forward(this);
 		

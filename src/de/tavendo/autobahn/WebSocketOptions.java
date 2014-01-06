@@ -18,6 +18,8 @@
 
 package de.tavendo.autobahn;
 
+import java.nio.ByteBuffer;
+
 
 
 /**
@@ -38,6 +40,10 @@ public class WebSocketOptions {
     private int mReconnectInterval;
     private boolean mUseInsecureSocketFactory;
 
+    private boolean mReuseBuffers;
+    private ByteBuffer mReaderBuffer;
+    private ByteBuffer mWriterBuffer;
+    private NoCopyByteArrayOutputStream mReaderStream;
 
     /**
      * Construct default options.
@@ -54,6 +60,7 @@ public class WebSocketOptions {
         mMaskClientFrames = true;
         mReconnectInterval = 0;  // no reconnection by default
         mUseInsecureSocketFactory = false; // be secure by default
+        mReuseBuffers = true; // reuse buffers by default to save RAM
     }
 
     /**
@@ -73,6 +80,11 @@ public class WebSocketOptions {
         mMaskClientFrames = other.mMaskClientFrames;
         mReconnectInterval = other.mReconnectInterval;
         mUseInsecureSocketFactory = other.mUseInsecureSocketFactory;
+        mReuseBuffers = other.mReuseBuffers;
+        
+        mReaderBuffer = other.mReaderBuffer;
+        mReaderStream = other.mReaderStream;
+        mWriterBuffer = other.mWriterBuffer;
     }
 
     /**
@@ -289,4 +301,54 @@ public class WebSocketOptions {
     public boolean getUseInsecureSocketFactory() {
         return mUseInsecureSocketFactory;
     }
+    
+    public void setReuseBuffers(final boolean reuse) {
+        mReuseBuffers = reuse;
+        mReaderBuffer = null;
+        mReaderStream = null;
+        mWriterBuffer = null;
+    }
+
+    public ByteBuffer createReaderBuffer() {
+        final ByteBuffer buffer = mReaderBuffer;
+        if (buffer != null) { // it will only be non-null if we're reusing buffers
+            buffer.clear();
+            return buffer;
+        }
+        
+        final ByteBuffer newBuffer = ByteBuffer.allocateDirect(mMaxFramePayloadSize + 14);
+        if (mReuseBuffers) 
+            mReaderBuffer = newBuffer;
+        
+        return newBuffer;
+    }
+
+    public ByteBuffer createWriterBuffer() {
+        final ByteBuffer buffer = mWriterBuffer;
+        if (buffer != null) { // see above
+            buffer.clear();
+            return buffer; 
+        }
+
+        final ByteBuffer newBuffer = ByteBuffer.allocateDirect(mMaxFramePayloadSize + 14);
+        if (mReuseBuffers)
+            mWriterBuffer = newBuffer;
+        
+        return newBuffer;
+    }
+
+    public NoCopyByteArrayOutputStream createMessagePayloadStream() {
+        final NoCopyByteArrayOutputStream stream = mReaderStream;
+        if (stream != null) { // see above
+            stream.reset();
+            return stream;
+        }
+        
+        final NoCopyByteArrayOutputStream newStream = new NoCopyByteArrayOutputStream(mMaxMessagePayloadSize);
+        if (mReuseBuffers)
+            mReaderStream = newStream;
+        
+        return newStream;
+    }
+
 }
