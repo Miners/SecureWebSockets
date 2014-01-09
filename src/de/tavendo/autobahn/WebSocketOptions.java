@@ -330,7 +330,9 @@ public class WebSocketOptions {
             return buffer; 
         }
 
-        final ByteBuffer newBuffer = ByteBuffer.allocateDirect(mMaxFramePayloadSize + 14);
+        // apparently allocateDirect may not return a usable buffer
+        //  (we need something where array() works, and it doesn't on S2 with Direct)
+        final ByteBuffer newBuffer = ByteBuffer.allocate(mMaxFramePayloadSize + 14);
         if (mReuseBuffers)
             mWriterBuffer = newBuffer;
         
